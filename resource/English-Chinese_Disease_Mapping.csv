@@ -1,0 +1,99 @@
+English Keyword,Chinese Disease Name,对应的疾病类型
+abnormal pigment,异常色素,O
+anterior segment image,前节影像,M
+arteriosclerosis,动脉硬化,O
+asteroid hyalosis,星状玻璃体病,O
+atrophic change,萎缩性改变,O
+atrophy,萎缩,O
+branch retinal artery occlusion,分支视网膜动脉阻塞,O
+branch retinal vein occlusion,分支视网膜静脉阻塞,O
+cataract,白内障,C
+central retinal artery occlusion,中心视网膜动脉阻塞,O
+central retinal vein occlusion,中心视网膜静脉阻塞,O
+central serous chorioretinopathy,中心性浆液性脉络膜视网膜病,O
+chorioretinal atrophy,脉络膜视网膜萎缩,O
+chorioretinal atrophy with pigmentation proliferation,伴色素增生的脉络膜视网膜萎缩,O
+choroidal nevus,脉络膜痣,O
+congenital choroidal coloboma,先天性脉络膜裂,O
+depigmentation of the retinal pigment epithelium,视网膜色素上皮去色素,O
+diabetic retinopathy,糖尿病视网膜病变,D
+diffuse chorioretinal atrophy,弥漫性脉络膜视网膜萎缩,O
+diffuse retinal atrophy,弥漫性视网膜萎缩,O
+drusen,玻璃疣,O
+dry age-related macular degeneration,干性老年性黄斑变性,A
+epiretinal membrane,视网膜前膜,O
+epiretinal membrane over the macula,黄斑区视网膜前膜,O
+fundus laser photocoagulation spots,眼底激光光凝斑,O
+glaucoma,青光眼,G
+glial remnants anterior to the optic disc,视盘前胶质残留,O
+hypertensive retinopathy,高血压视网膜病变,H
+idiopathic choroidal neovascularization,特发性脉络膜新生血管,O
+image offset,图像偏移,无分类，对分类结果没有影响
+intraretinal hemorrhage,视网膜内出血,O
+laser spot,激光斑,O
+lens dust,晶状体尘埃,无分类、对分类结果没有影响
+low image quality,低质量图像,无分类、对分类结果没有影响
+macular coloboma,黄斑裂,O
+macular epiretinal membrane,黄斑前膜,O
+macular hole,黄斑裂孔,O
+macular pigmentation disorder,黄斑色素异常,O
+maculopathy,黄斑病变,O
+mild nonproliferative retinopathy,轻度非增殖性糖尿病视网膜病变,D
+moderate non proliferative retinopathy,中度非增殖性糖尿病视网膜病变,D
+morning glory syndrome,早晨荣耀综合征,O
+myelinated nerve fibers,髓鞘化神经纤维,O
+myopia retinopathy,近视视网膜病变,M
+myopic maculopathy,近视黄斑病变,M
+myopic retinopathy,近视视网膜病变,M
+normal fundus,正常眼底,N
+old branch retinal vein occlusion,陈旧性分支视网膜静脉阻塞,O
+old central retinal vein occlusion,陈旧性中心视网膜静脉阻塞,O
+old chorioretinopathy,陈旧性脉络膜视网膜病变,O
+old choroiditis,陈旧性脉络膜炎,O
+optic disc edema,视盘水肿,O
+optic discitis,视盘炎,O
+optic disk epiretinal membrane,视盘前膜,O
+optic disk photographically invisible,视盘照片不可见,无分类，对分类结果没有影响
+optic nerve atrophy,视神经萎缩,O
+oval yellow-white atrophy,椭圆形黄白色萎缩,O
+pathological myopia,病理性近视,M
+peripapillary atrophy,视盘周围萎缩,O
+pigment epithelium proliferation,色素上皮增生,O
+pigmentation disorder,色素异常,O
+post laser photocoagulation,激光光凝术后,O
+proliferative diabetic retinopathy,增殖性糖尿病视网膜病变,D
+punctate inner choroidopathy,点状内层脉络膜病变,O
+refractive media opacity,屈光介质混浊,O
+retina fold,视网膜皱褶,O
+retinal artery macroaneurysm,视网膜动脉大动脉瘤,O
+retinal detachment,视网膜脱离,O
+retinal pigment epithelial hypertrophy,视网膜色素上皮肥厚,O
+retinal pigment epithelium atrophy,视网膜色素上皮萎缩,O
+retinal pigmentation,视网膜色素沉着,O
+retinal vascular sheathing,视网膜血管鞘化,O
+retinitis pigmentosa,色素性视网膜炎,O
+retinochoroidal coloboma,视网膜脉络膜裂,O
+rhegmatogenous retinal detachment,裂孔性视网膜脱离,O
+severe nonproliferative retinopathy,重度非增殖性糖尿病视网膜病变,D
+severe proliferative diabetic retinopathy,严重增殖性糖尿病视网膜病变,D
+silicone oil eye,硅油眼,O
+spotted membranous change,斑点状膜样改变,O
+suspected abnormal color of optic disc,可疑视盘颜色异常,O
+suspected cataract,可疑白内障,C
+suspected diabetic retinopathy,可疑糖尿病视网膜病变,D
+suspected glaucoma,可疑青光眼,G
+suspected macular epimacular membrane,可疑黄斑前膜,O
+suspected microvascular anomalies,可疑微血管异常,O
+suspected moderate non proliferative retinopathy,可疑中度非增殖性糖尿病视网膜病变,D
+suspected retinal vascular sheathing,可疑视网膜血管鞘化,O
+suspected retinitis pigmentosa,可疑色素性视网膜炎,O
+suspicious diabetic retinopathy,可疑糖尿病视网膜病变,D
+tessellated fundus,镶嵌状眼底,O
+vascular loops,血管环,O
+vessel tortuosity,血管扭曲,O
+vitreous degeneration,玻璃体变性,O
+vitreous opacity,玻璃体混浊,O
+wedge white line change,楔形白线改变,O
+wedge-shaped change,楔形改变,O
+wet age-related macular degeneration,湿性老年性黄斑变性,A
+white vessel,白色血管,O
