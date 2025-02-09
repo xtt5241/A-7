@@ -43,8 +43,8 @@ class EyeDataset(Dataset):
         return image, label
 
 # 3️⃣ 训练集 / 验证集划分
-excel_path = "XTT\dataset\Traning_Dataset.xlsx"
-data_dir = "XTT\dataset\output"
+excel_path = "dataset\Traning_Dataset.xlsx"
+data_dir = "dataset\output"
 dataset = EyeDataset(data_dir, excel_path)
 
 train_idx, val_idx = train_test_split(range(len(dataset)), test_size=0.2, random_state=42)
