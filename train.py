@@ -1,134 +1,153 @@
+# train.py
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-import pandas as pd
-from data_mul import train_loader, val_loader
-from model import load_model
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from torch.utils.data import DataLoader, Subset
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import matplotlib.pyplot as plt
 
-# 🚀 设备选择
+from data_mul import EyeDatasetMultiTask
+from model import load_model
+from focal_loss import FocalLoss
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"🚀 设备: {device}")
 
-# 🚀 计算 `pos_weight`
-def compute_pos_weight(train_loader):
-    total_samples = 0
-    positive_counts = torch.zeros(98).to(device)
+##########################
+# 1. 构建数据集
+##########################
+excel_path = "dataset/Traning_Dataset.xlsx"
+mapping_path = "dataset/English-Chinese_Disease_Mapping.csv"
+data_dir = "dataset/output"
 
-    for _, labels in train_loader:
-        labels = labels.to(device).sum(dim=0)  # 统计每个类别的正样本数
-        positive_counts += labels
-        total_samples += labels.shape[0]
+dataset = EyeDatasetMultiTask(data_dir, excel_path, mapping_path)
+train_idx, val_idx = train_test_split(range(len(dataset)), test_size=0.2, random_state=42)
 
-    # 防止 `pos_weight` 过大
-    pos_weight = (total_samples - positive_counts) / (positive_counts + 1e-5)
-    pos_weight = torch.clamp(pos_weight, max=10.0)  # 🚀 限制最大值
-    return pos_weight.to(device)
+train_loader = DataLoader(Subset(dataset, train_idx), batch_size=8, shuffle=True, num_workers=0)
+val_loader = DataLoader(Subset(dataset, val_idx), batch_size=8, shuffle=False, num_workers=0)
 
-# 计算 `pos_weight`
-pos_weight = compute_pos_weight(train_loader)
+num_keywords = len(dataset.keywords_list)      # 98
+num_categories = len(dataset.categories_list)  # 例如 8
 
-# 🚀 `Xavier` 初始化，稳定训练
-def init_weights(m):
-    if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
-        torch.nn.init.xavier_uniform_(m.weight)
-        if m.bias is not None:
-            torch.nn.init.zeros_(m.bias)
+##########################
+# 2. 加载模型
+##########################
+model = load_model(num_keywords, num_categories)
+model = model.to(device)
 
-# 🚀 训练模型
-def train_model(model, train_loader, val_loader, epochs=50):
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)  # 🚀 降低 lr
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 🚀 使用 `pos_weight`
+##########################
+# 3. 定义FocalLoss
+##########################
+# 这里简单用 alpha=1, gamma=2
+criterion_kws = FocalLoss(alpha=1.0, gamma=2.0, reduction='mean')
+criterion_cats = FocalLoss(alpha=1.0, gamma=2.0, reduction='mean')
 
+##########################
+# 4. 优化器 & 调度
+##########################
+optimizer = optim.Adam(model.parameters(), lr=1e-5)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+
+##########################
+# 5. 训练函数
+##########################
+def train_model(model, train_loader, val_loader, epochs=10):
     train_losses = []
 
     for epoch in range(epochs):
         model.train()
-        total_loss = 0.0
-        print(f"🚀 开始 Epoch {epoch+1}")
+        running_loss = 0.0
 
-        for batch_idx, (images, labels) in enumerate(train_loader):
-            images, labels = images.to(device), labels.to(device).float()  # 🚀 确保 `labels` 是 float 类型
+        print(f"\nEpoch {epoch+1}/{epochs}")
+        for batch_idx, (images, label_kws, label_cats) in enumerate(train_loader):
+            images = images.to(device)
+            label_kws = label_kws.to(device)
+            label_cats = label_cats.to(device)
+
             optimizer.zero_grad()
-            outputs = model(images)
+            pred_kws, pred_cats = model(images)
 
-            # 🚨 **检查 `labels` 是否异常**
-            if labels.min() < 0 or labels.max() > 1:
-                print(f"❌ 发现异常 `labels` 值: min={labels.min()}, max={labels.max()}")
-                exit()
-
-            loss = criterion(outputs, labels)
-
-            # 🚨 **检查 `loss` 是否 NaN**
-            if torch.isnan(loss):
-                print("❌ 发现 NaN 损失！")
-                print("outputs:", outputs)
-                print("labels:", labels)
-                exit()
+            # 分别计算关键词、类别的FocalLoss
+            loss_k = criterion_kws(pred_kws, label_kws)
+            loss_c = criterion_cats(pred_cats, label_cats)
+            loss = loss_k + loss_c
 
             loss.backward()
-
-            # 🚀 **梯度裁剪**
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-
             optimizer.step()
-            total_loss += loss.item()
 
+            running_loss += loss.item()
             if batch_idx % 10 == 0:
-                print(f"✅ Batch {batch_idx+1} Loss: {loss.item():.4f}")
+                print(f" Batch {batch_idx}: loss={loss.item():.4f} (kws={loss_k.item():.4f}, cats={loss_c.item():.4f})")
 
-        avg_loss = total_loss / len(train_loader)
+        avg_loss = running_loss / len(train_loader)
         train_losses.append(avg_loss)
-        print(f"✅ Epoch {epoch+1} | Avg Loss: {avg_loss:.4f}")
+        print(f"Epoch {epoch+1} - Avg Loss: {avg_loss:.4f}")
 
-        scheduler.step(avg_loss)  # 🚀 `ReduceLROnPlateau`
-        evaluate_model(model, val_loader)
+        scheduler.step(avg_loss)
+        evaluate(model, val_loader)
 
-    plt.plot(train_losses, label="Train Loss")
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.title("Training Loss Curve")
+    # 训练曲线
+    plt.figure()
+    plt.plot(train_losses, label='Train Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training Loss Curve')
     plt.legend()
     plt.show()
 
-# 🚀 评估模型
-def evaluate_model(model, val_loader):
+##########################
+# 6. 验证集评估
+##########################
+def evaluate(model, val_loader):
     model.eval()
-    all_labels = []
-    all_predictions = []
+    all_kws_labels = []
+    all_kws_preds = []
+
+    all_cat_labels = []
+    all_cat_preds = []
 
     with torch.no_grad():
-        for images, labels in val_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            probabilities = torch.sigmoid(outputs).cpu().numpy()
+        for images, label_kws, label_cats in val_loader:
+            images = images.to(device)
+            pred_kws, pred_cats = model(images)
 
-            all_labels.append(labels.cpu().numpy())
-            all_predictions.append(probabilities)
+            kws_prob = torch.sigmoid(pred_kws).cpu().numpy()
+            cats_prob = torch.sigmoid(pred_cats).cpu().numpy()
 
-    all_labels = np.vstack(all_labels)
-    all_predictions = np.vstack(all_predictions)
+            all_kws_labels.append(label_kws.numpy())
+            all_kws_preds.append(kws_prob)
 
-    # 🚀 **防止 `F1-score` 计算错误**
-    if all_predictions.shape != all_labels.shape:
-        print("❌ `evaluate_model()` 维度错误！")
-        print(f"all_labels.shape={all_labels.shape}, all_predictions.shape={all_predictions.shape}")
-        return
+            all_cat_labels.append(label_cats.numpy())
+            all_cat_preds.append(cats_prob)
 
-    accuracy = accuracy_score(all_labels, all_predictions > 0.5)
-    precision = precision_score(all_labels, all_predictions > 0.5, average='samples', zero_division=0)
-    recall = recall_score(all_labels, all_predictions > 0.5, average='samples', zero_division=0)
-    f1 = f1_score(all_labels, all_predictions > 0.5, average='samples', zero_division=0)
+    # 拼接
+    all_kws_labels = np.vstack(all_kws_labels)
+    all_kws_preds = np.vstack(all_kws_preds)
+    all_cat_labels = np.vstack(all_cat_labels)
+    all_cat_preds = np.vstack(all_cat_preds)
 
-    print(f"✅ 验证集结果: 准确率: {accuracy:.4f}, 精确率: {precision:.4f}, 召回率: {recall:.4f}, F1分数: {f1:.4f}")
+    # 阈值0.5
+    bin_kws = (all_kws_preds > 0.5).astype(int)
+    bin_cats = (all_cat_preds > 0.5).astype(int)
 
+    # 多标签评估(sklearn的'accuracy_score'会要求完全匹配才算1)
+    kws_acc = accuracy_score(all_kws_labels, bin_kws)
+    kws_prec = precision_score(all_kws_labels, bin_kws, average='samples', zero_division=0)
+    kws_rec = recall_score(all_kws_labels, bin_kws, average='samples', zero_division=0)
+    kws_f1 = f1_score(all_kws_labels, bin_kws, average='samples', zero_division=0)
 
+    cats_acc = accuracy_score(all_cat_labels, bin_cats)
+    cats_prec = precision_score(all_cat_labels, bin_cats, average='samples', zero_division=0)
+    cats_rec = recall_score(all_cat_labels, bin_cats, average='samples', zero_division=0)
+    cats_f1 = f1_score(all_cat_labels, bin_cats, average='samples', zero_division=0)
 
-if __name__ == '__main__':
-    model, _ = load_model("dataset/English-Chinese_Disease_Mapping.csv")
-    model = model.to(device)
-    model.apply(init_weights)  # 🚀 使用 `Xavier` 初始化
-    train_model(model, train_loader, val_loader)
+    print(f"[Keywords] Acc={kws_acc:.4f}, Prec={kws_prec:.4f}, Rec={kws_rec:.4f}, F1={kws_f1:.4f}")
+    print(f"[Category] Acc={cats_acc:.4f}, Prec={cats_prec:.4f}, Rec={cats_rec:.4f}, F1={cats_f1:.4f}")
+
+##########################
+# 7. 主入口
+##########################
+if __name__ == "__main__":
+    train_model(model, train_loader, val_loader, epochs=10)

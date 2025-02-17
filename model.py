@@ -1,35 +1,66 @@
+# model.py
 import torch
 import torch.nn as nn
 import torchvision.models as models
-import pandas as pd
 
-# 1️⃣ 读取 99 关键词
-def load_keywords(mapping_path):
-    mapping_df = pd.read_csv(mapping_path, encoding='gbk')
-
-    # 🚀 **确保跳过第一行标题**
-    if "English Keyword" in mapping_df.iloc[0].values:
-        mapping_df = mapping_df.iloc[1:].reset_index(drop=True)  # **跳过标题行**
-
-    keywords = mapping_df["English Keyword"].str.lower().str.strip().tolist()
-    print(f"✅ `model.py` 关键词数: {len(keywords)}")  # 🚀 打印类别数，确保和 `data_mul.py` 一致
-    return keywords
-
-def load_model(mapping_path):
+def load_model(num_keywords=98, num_categories=8):
+    """
+    构建双输出头的EfficientNet-B3:
+      - head_keywords: 输出 num_keywords 维 (Sigmoid)
+      - head_categories: 输出 num_categories 维 (Sigmoid)
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    keywords = load_keywords(mapping_path)
-    num_keywords = len(keywords)  # 🚀 **98 个类别**
+    # 1) 加载预训练的 EfficientNet-B3
+    backbone = models.efficientnet_b3(weights=models.EfficientNet_B3_Weights.IMAGENET1K_V1)
 
-    model = models.efficientnet_b3(weights=models.EfficientNet_B3_Weights.IMAGENET1K_V1)
-    model.features[0][0] = nn.Conv2d(6, 40, kernel_size=3, stride=2, padding=1, bias=False)
+    # 2) 修改输入通道 3->6
+    old_conv = backbone.features[0][0]
+    in_channels = 6
+    out_channels = old_conv.out_channels
+    kernel_size = old_conv.kernel_size
+    stride = old_conv.stride
+    padding = old_conv.padding
+    bias = (old_conv.bias is not None)
 
-    # 🚀 确保模型输出和 `data_mul.py` 一致
-    model.classifier = nn.Sequential(
-        nn.Linear(model.classifier[1].in_features, num_keywords),
+    new_conv = nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=bias)
+    with torch.no_grad():
+        # 复制前3通道权重
+        new_conv.weight[:, :3, :, :] = old_conv.weight
+        # 后3通道随机初始化
+        nn.init.xavier_uniform_(new_conv.weight[:, 3:, :, :])
+        if bias:
+            new_conv.bias.copy_(old_conv.bias)
+
+    backbone.features[0][0] = new_conv
+
+    # 3) 去掉最后分类层
+    in_feats = backbone.classifier[1].in_features
+    backbone.classifier = nn.Identity()
+
+    # 4) 定义双头
+    head_keywords = nn.Sequential(
+        nn.Linear(in_feats, num_keywords),
+        nn.Sigmoid()
+    )
+    head_categories = nn.Sequential(
+        nn.Linear(in_feats, num_categories),
         nn.Sigmoid()
     )
 
-    print(f"✅ `model.py` 输出关键词类别数: {num_keywords}")  # 🚀 打印类别数，确保和 `data_mul.py` 一致
-    return model, keywords
+    # 封装成一个自定义模块
+    model = MultiTaskModel(backbone, head_keywords, head_categories)
+    return model.to(device)
 
+class MultiTaskModel(nn.Module):
+    def __init__(self, backbone, head_keywords, head_categories):
+        super().__init__()
+        self.backbone = backbone
+        self.head_keywords = head_keywords
+        self.head_categories = head_categories
+
+    def forward(self, x):
+        feat = self.backbone(x)          # (batch, in_feats)
+        pred_kws = self.head_keywords(feat)   # (batch, num_keywords)
+        pred_cats = self.head_categories(feat) # (batch, num_categories)
+        return pred_kws, pred_cats
