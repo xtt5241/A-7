@@ -1,91 +1,134 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.models as models
-from dataset import train_loader, val_loader
+import numpy as np
+import pandas as pd
+from data_mul import train_loader, val_loader
+from model import load_model
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+import matplotlib.pyplot as plt
 
-# 🚀 1. 设备选择（确保 GPU 运行）
+# 🚀 设备选择
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"🚀 使用设备: {device}")
+print(f"🚀 设备: {device}")
 
-# 🚀 2. 禁用 cuDNN 以避免 `CUDNN_STATUS_BAD_PARAM_STREAM_MISMATCH`
-torch.backends.cudnn.enabled = False
-torch.backends.cudnn.benchmark = False
-torch.backends.cudnn.deterministic = True
+# 🚀 计算 `pos_weight`
+def compute_pos_weight(train_loader):
+    total_samples = 0
+    positive_counts = torch.zeros(98).to(device)
 
-# 🚀 3. 加载 EfficientNet-B3（减少显存）
-model = models.efficientnet_b3(weights=models.EfficientNet_B3_Weights.IMAGENET1K_V1)
+    for _, labels in train_loader:
+        labels = labels.to(device).sum(dim=0)  # 统计每个类别的正样本数
+        positive_counts += labels
+        total_samples += labels.shape[0]
 
-# 🚀 4. 修改输入层（支持 6 通道）
-new_conv = nn.Conv2d(6, 40, kernel_size=3, stride=2, padding=1, bias=False)
-new_conv.weight.data[:, :3, :, :] = model.features[0][0].weight.data  # 复制原始权重
-model.features[0][0] = new_conv  # 替换第一层卷积
+    # 防止 `pos_weight` 过大
+    pos_weight = (total_samples - positive_counts) / (positive_counts + 1e-5)
+    pos_weight = torch.clamp(pos_weight, max=10.0)  # 🚀 限制最大值
+    return pos_weight.to(device)
 
-# 🚀 5. 修改分类层（8 类）
-model.classifier[1] = nn.Linear(model.classifier[1].in_features, 8)
-model = model.to(device)
+# 计算 `pos_weight`
+pos_weight = compute_pos_weight(train_loader)
 
-# 🚀 6. 定义损失函数 & 优化器
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
+# 🚀 `Xavier` 初始化，稳定训练
+def init_weights(m):
+    if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+        torch.nn.init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            torch.nn.init.zeros_(m.bias)
 
-# 🚀 7. 启用混合精度（减少显存占用）
-scaler = torch.amp.GradScaler()
-
+# 🚀 训练模型
 def train_model(model, train_loader, val_loader, epochs=50):
-    print("🚀 开始训练模型...")
-    model.train()
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)  # 🚀 降低 lr
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)  # 🚀 使用 `pos_weight`
+
+    train_losses = []
 
     for epoch in range(epochs):
-        total_loss, correct, total = 0, 0, 0
+        model.train()
+        total_loss = 0.0
+        print(f"🚀 开始 Epoch {epoch+1}")
 
         for batch_idx, (images, labels) in enumerate(train_loader):
-            images, labels = images.to(device), labels.to(device)
-
+            images, labels = images.to(device), labels.to(device).float()  # 🚀 确保 `labels` 是 float 类型
             optimizer.zero_grad()
+            outputs = model(images)
 
-            # 🚀 使用新的 `autocast("cuda")`（修复 FutureWarning）
-            with torch.amp.autocast("cuda"):
-                outputs = model(images)
-                loss = criterion(outputs, labels)
+            # 🚨 **检查 `labels` 是否异常**
+            if labels.min() < 0 or labels.max() > 1:
+                print(f"❌ 发现异常 `labels` 值: min={labels.min()}, max={labels.max()}")
+                exit()
 
-            # 🚀 混合精度优化
-            scaler.scale(loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            loss = criterion(outputs, labels)
 
+            # 🚨 **检查 `loss` 是否 NaN**
+            if torch.isnan(loss):
+                print("❌ 发现 NaN 损失！")
+                print("outputs:", outputs)
+                print("labels:", labels)
+                exit()
+
+            loss.backward()
+
+            # 🚀 **梯度裁剪**
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
+
+            optimizer.step()
             total_loss += loss.item()
-            correct += (outputs.argmax(1) == labels).sum().item()
-            total += labels.size(0)
 
             if batch_idx % 10 == 0:
-                print(f"Epoch {epoch+1}, Batch {batch_idx}, Loss: {loss.item():.4f}")
+                print(f"✅ Batch {batch_idx+1} Loss: {loss.item():.4f}")
 
-        train_acc = 100 * correct / total
-        print(f"✅ Epoch {epoch+1} | Loss: {total_loss:.4f} | Accuracy: {train_acc:.2f}%")
+        avg_loss = total_loss / len(train_loader)
+        train_losses.append(avg_loss)
+        print(f"✅ Epoch {epoch+1} | Avg Loss: {avg_loss:.4f}")
 
-        torch.cuda.empty_cache()  # 🚀 清理 CUDA 缓存
+        scheduler.step(avg_loss)  # 🚀 `ReduceLROnPlateau`
         evaluate_model(model, val_loader)
 
+    plt.plot(train_losses, label="Train Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.title("Training Loss Curve")
+    plt.legend()
+    plt.show()
+
+# 🚀 评估模型
 def evaluate_model(model, val_loader):
     model.eval()
-    correct, total = 0, 0
+    all_labels = []
+    all_predictions = []
 
     with torch.no_grad():
         for images, labels in val_loader:
             images, labels = images.to(device), labels.to(device)
             outputs = model(images)
-            _, predicted = torch.max(outputs, 1)
-            correct += (predicted == labels).sum().item()
-            total += labels.size(0)
+            probabilities = torch.sigmoid(outputs).cpu().numpy()
 
-    accuracy = 100 * correct / total
-    print(f"🟠 验证集准确率: {accuracy:.2f}%")
-    model.train()
+            all_labels.append(labels.cpu().numpy())
+            all_predictions.append(probabilities)
 
-# 🚀 8. 训练
-train_model(model, train_loader, val_loader, epochs=50)
+    all_labels = np.vstack(all_labels)
+    all_predictions = np.vstack(all_predictions)
 
-# 🚀 9. 保存模型
-torch.save(model.state_dict(), "efficientnet_6ch_50epoch.pth")
-print("✅ 训练完成，模型已保存！")
+    # 🚀 **防止 `F1-score` 计算错误**
+    if all_predictions.shape != all_labels.shape:
+        print("❌ `evaluate_model()` 维度错误！")
+        print(f"all_labels.shape={all_labels.shape}, all_predictions.shape={all_predictions.shape}")
+        return
+
+    accuracy = accuracy_score(all_labels, all_predictions > 0.5)
+    precision = precision_score(all_labels, all_predictions > 0.5, average='samples', zero_division=0)
+    recall = recall_score(all_labels, all_predictions > 0.5, average='samples', zero_division=0)
+    f1 = f1_score(all_labels, all_predictions > 0.5, average='samples', zero_division=0)
+
+    print(f"✅ 验证集结果: 准确率: {accuracy:.4f}, 精确率: {precision:.4f}, 召回率: {recall:.4f}, F1分数: {f1:.4f}")
+
+
+
+if __name__ == '__main__':
+    model, _ = load_model("dataset/English-Chinese_Disease_Mapping.csv")
+    model = model.to(device)
+    model.apply(init_weights)  # 🚀 使用 `Xavier` 初始化
+    train_model(model, train_loader, val_loader)
