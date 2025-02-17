@@ -1,4 +1,5 @@
 # data_mul.py
+
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -9,7 +10,7 @@ from sklearn.preprocessing import MultiLabelBinarizer
 def load_mapping(mapping_path):
     """
     从 CSV 读取关键词->疾病类型映射，并收集所有关键词和所有可能的疾病类型。
-    假设总共有98个关键字，8或10个疾病类型（具体数量看文件）。
+    假设总共有98个关键字，8~10个疾病类型（具体数量看文件）。
     """
     df = pd.read_csv(mapping_path, encoding='gbk')
 
@@ -26,14 +27,15 @@ def load_mapping(mapping_path):
         keyword2cat[kw] = cat
         categories_set.add(cat)
 
-    keywords_list = list(keyword2cat.keys())      # 98 个关键词
-    categories_list = sorted(list(categories_set))  # 8~10个大类
+    keywords_list = list(keyword2cat.keys())       # 98 个关键词
+    categories_list = sorted(list(categories_set)) # 8~10 个大类
 
     return keyword2cat, keywords_list, categories_list
 
 def load_labels(excel_path, keyword2cat):
     """
-    从 Excel 中读取 (Left-Fundus, Right-Fundus) -> (左/右眼关键字列表) -> (疾病类型列表)
+    从 Excel 中读取 (Left-Fundus, Right-Fundus) -> (诊断关键词) -> (对应的疾病类型)
+    并返回字典: { img_name.npy : [关键词列表], ... }, { img_name.npy : [类别列表], ... }
     """
     df = pd.read_excel(excel_path)
     img2kws = {}
@@ -41,11 +43,8 @@ def load_labels(excel_path, keyword2cat):
 
     for _, row in df.iterrows():
         for eye in ["Left", "Right"]:
-            fundus_name = str(row[f"{eye}-Fundus"])  # e.g. "0_left.jpg"
-            if fundus_name.endswith(f"_{eye.lower()}.jpg"):
-                npy_name = fundus_name.replace(f"_{eye.lower()}.jpg", ".npy")
-            else:
-                npy_name = fundus_name  # 若命名不一致，请自行适配
+            fundus_name = str(row[f"{eye}-Fundus"])  # 如 "0_left.jpg"
+            npy_name = fundus_name.replace(f"_{eye.lower()}.jpg", ".npy")  # 如 "0_left.jpg" -> "0.npy"
 
             diag_str = row[f"{eye}-Diagnostic Keywords"]
             if isinstance(diag_str, str):
@@ -67,9 +66,8 @@ def load_labels(excel_path, keyword2cat):
 
 class EyeDatasetMultiTask(Dataset):
     """
-    同时输出两套标签:
-      1) 98维关键词多标签
-      2) 8~10维疾病类别多标签
+    多标签 + 多类别:
+    返回 (图像[6通道], 关键词多标签[98维], 疾病类型多标签[8~10维], 文件名)
     """
     def __init__(self, data_dir, excel_path, mapping_path):
         self.data_dir = Path(data_dir)
@@ -77,22 +75,25 @@ class EyeDatasetMultiTask(Dataset):
         # 1) 加载映射
         self.keyword2cat, self.keywords_list, self.categories_list = load_mapping(mapping_path)
 
-        # 2) 从 Excel 中读出每张图对应的 (关键词列表, 类别列表)
+        # 2) 从 Excel 中读出每张图对应的关键词/类别
         self.img2kws, self.img2cats = load_labels(excel_path, self.keyword2cat)
 
         # 3) 收集所有 .npy 文件
         self.image_files = list(self.data_dir.glob("*.npy"))
 
-        # 4) 分别初始化多标签 binarizer
+        # 4) 初始化多标签 binarizer
         self.mlb_kws = MultiLabelBinarizer(classes=self.keywords_list)
-        self.mlb_kws.fit([self.keywords_list])  # 让 classes_ 固定为 98
+        self.mlb_kws.fit([self.keywords_list])
 
         self.mlb_cats = MultiLabelBinarizer(classes=self.categories_list)
         self.mlb_cats.fit([self.categories_list])
 
         print(f"[EyeDatasetMultiTask] 图像数: {len(self.image_files)}")
         print(f"[EyeDatasetMultiTask] 关键词数: {len(self.keywords_list)}, 疾病类别数: {len(self.categories_list)}")
+        # 在这里插入一条打印，查看具体有哪些类别
+        print(">>> All categories list:", self.categories_list)
 
+        
     def __len__(self):
         return len(self.image_files)
 
@@ -101,12 +102,12 @@ class EyeDatasetMultiTask(Dataset):
         image = np.load(str(image_path))  # shape: (6, H, W)
         image_tensor = torch.tensor(image, dtype=torch.float32)
 
-        fname = image_path.name  # e.g. "0.npy"
+        fname = image_path.name
         kw_list = self.img2kws.get(fname, [])
         cat_list = self.img2cats.get(fname, [])
 
-        # 多标签 -> 0/1
+        # 转多标签 0/1
         label_kws = torch.tensor(self.mlb_kws.transform([kw_list])[0], dtype=torch.float32)
         label_cats = torch.tensor(self.mlb_cats.transform([cat_list])[0], dtype=torch.float32)
 
-        return image_tensor, label_kws, label_cats
+        return image_tensor, label_kws, label_cats, fname

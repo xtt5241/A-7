@@ -1,4 +1,5 @@
 # model.py
+
 import torch
 import torch.nn as nn
 import torchvision.models as models
@@ -48,7 +49,6 @@ def load_model(num_keywords=98, num_categories=8):
         nn.Sigmoid()
     )
 
-    # 封装成一个自定义模块
     model = MultiTaskModel(backbone, head_keywords, head_categories)
     return model.to(device)
 
@@ -60,7 +60,7 @@ class MultiTaskModel(nn.Module):
         self.head_categories = head_categories
 
     def forward(self, x):
-        feat = self.backbone(x)          # (batch, in_feats)
-        pred_kws = self.head_keywords(feat)   # (batch, num_keywords)
+        feat = self.backbone(x)              # (batch, in_feats)
+        pred_kws = self.head_keywords(feat)  # (batch, num_keywords)
         pred_cats = self.head_categories(feat) # (batch, num_categories)
         return pred_kws, pred_cats
