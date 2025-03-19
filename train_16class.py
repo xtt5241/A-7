@@ -112,13 +112,13 @@ def evaluate_and_save_16class(model, val_loader, epoch_id):
                 tvec = labels16[i].numpy()
                 pvec = probs[i]
                 # 阈值0.5, 也可改成0.51或其它
-                binpvec = (pvec > 0.6).astype(int)
+                binpvec = (pvec > 0.4).astype(int)
 
                 sample_results.append((fname, tvec, pvec, binpvec))
 
     all_labels = np.vstack(all_labels)  # shape(N,16)
     all_preds  = np.vstack(all_preds)   # shape(N,16)
-    bin_preds  = (all_preds > 0.6).astype(int)
+    bin_preds  = (all_preds > 0.4).astype(int)
 
     acc  = accuracy_score(all_labels, bin_preds)
     prec = precision_score(all_labels, bin_preds, average='samples', zero_division=0)
