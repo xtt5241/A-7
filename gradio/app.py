@@ -100,64 +100,45 @@ def predict(left_eye_input, right_eye_input):
     return disease_str, medical_report  # 直接返回原始报告内容
 
 
-# 示例数据
-data = [['N', 30], ['D', 15], ['G', 25], ['C', 10], ['A', 20],['H', 10],['M', 10],['O', 10]]
-data2 = [['xtt', '男','N'], ['xtt', '男','D'], ['xtt', '男','G'], ['xtt', '男','C'], ['xtt', '男','A'],['xtt', '男','H'],['xtt', '男','M'],['xtt', '男','O']]
 
-def create_pie_chart(data):
-    # 将输入的数据转换为 DataFrame
-    df = pd.DataFrame(data, columns=['类别', '概率'])
-    labels = df['类别']
-    sizes = df['概率']
-    
-    # 创建饼状图
-    fig, ax = plt.subplots()
-    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
-    ax.axis('equal')  # 确保饼图为圆形
-    
-    return fig
-
-def create_pie_chart2(data):
-    # 将输入的数据转换为 DataFrame
-    df = pd.DataFrame(data, columns=['id', 'age'])
-    labels = df['id']
-    sizes = df['age']
-    
-    # 创建饼状图
-    fig, ax = plt.subplots()
-    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
-    ax.axis('equal')  # 确保饼图为圆形
-    
-    return fig
-
-# 批量读取excel文件
-def batch_predict_by_excel(excel_input):
-    # 读取 Excel 文件
-    df = pd.read_excel(excel_input.name)
-    # 初始化结果列表
-    results = []
-    # 遍历每一行数据
-
-    return results
-
-# 展示预处理结果
-def show_preprocessing_on_click(excel_input):
-    results = []
-
-    return results
-
-# =================== 读取并返回预处理图像 ===================
-import gradio as gr
-from PIL import Image
-import os
-
-# =================== 读取并返回预处理图像 ===================
-import gradio as gr
-from PIL import Image
-import os
-
-# 1. 指定你预处理图像所在的目录（自动兼容 Windows 和 Linux）
+# =================== 功能函数 ===================
+# 路径
 PREPROCESS_DIR = os.path.normpath("dataset/xxr/preprocess_images")
+BASE_DIR = os.path.normpath("dataset/Training_Dataset")
+EXCEL_DIR = os.path.normpath("dataset/training_annotation_(English).xlsx")
+
+
+# 根据id获取原图片路径
+# todo
+def get_image_path_by_id(patient_id, eye):
+    path= "dataset/Training_Dataset/"+patient_id + "_" + eye+ ".jpg"
+    # print("原图片路径：",path)
+    return path
+
+# 根据id获取预处理后的图片路径
+# todo
+def get_preprocessed_image_path_by_id(patient_id, eye):
+    path= "dataset/xxr/preprocess_images/"+patient_id + "_" + eye+ "_preprocess.jpg"
+    # print("预处理后图片路径：",path)
+    return path
+
+
+
+# 根据上传的图片路径获取id
+# todo
+def get_id_by_uploaded_image_path(image_path):
+    # 假设你有一个函数 get_id_by_image_path(image_path) 可以根据图片路径获取ID
+    # 这里只是一个示例，你需要根据实际情况实现这个
+    return "patient_id"
+
+# =================== 单组导入的函数 ===================
+import gradio as gr
+from PIL import Image
+import os
+
+# 读取并返回预处理图像
+# 1. 指定你预处理图像所在的目录（自动兼容 Windows 和 Linux）
+
 
 def show_preprocessed_images(left_path, right_path):
     """
@@ -208,12 +189,221 @@ def show_preprocessed_images(left_path, right_path):
     return left_pre_img, right_pre_img
 
 
+# =================== 批量读取的函数 ===================
+data2 = [[]]
+def get_selected_id(df, evt: gr.SelectData):
+    # evt.index = 被点击的行号
+    if evt.index is None:
+        return ""
+
+    row_series = df.iloc[evt.index]  # 期望是一行
+    patient_id_val = row_series["id"]
+
+    # 如果不小心取到多行(或重复索引)就会是一个Series
+    if isinstance(patient_id_val, pd.Series):
+        # 只取第一个元素
+        patient_id_val = patient_id_val.iloc[0]
+
+    # 转成字符串返回给文本框
+    return str(patient_id_val)
+
+# 根据ID获取病人信息
+def get_information_by_id(batch_df, patient_id):
+    # 如果没有选择任何行，patient_id 可能为空
+    if not patient_id:
+        return "", "", "", "",None, None
+
+    # 1) 用布尔索引或查询语句, 找到 DataFrame 中 id == patient_id 的行
+    #    若 id 列原本是 int 类型，需要做一次 astype(str) 与点击后的 string 比较
+    matched = batch_df[ batch_df["id"].astype(str) == str(patient_id) ]
+
+    # 2) 如果找不到对应行，就返回一些提示或默认值
+    if matched.empty:
+        return str(patient_id), "未找到年龄", "未找到性别","未找到病症", None, None
+
+    # 3) 否则取第一条匹配结果
+    #    row 是一个 pd.Series，包含 "id", "age", "ill" 这几列
+    row = matched.iloc[0]
+    # print("row",row)
+
+    # 从这行中提取年龄、性别、病症
+    patient_age = row["年龄"]
+    patient_sex = row["性别"]
+    patient_ill = row["疾病"]
+
+    # 4) 如果需要根据 ID 获取预处理图像
+    #    这里只是演示，你要自行实现 get_preprocessed_image_path_by_id()
+    left_image_path = get_preprocessed_image_path_by_id(str(patient_id), eye="left")   # 自定义实现
+    right_image_path = get_preprocessed_image_path_by_id(str(patient_id), eye="right") # 自定义实现
+
+    # 加载图像(若路径不存在或为空，则返回 None)
+    left_image = Image.open(left_image_path) if left_image_path and os.path.exists(left_image_path) else None
+    right_image = Image.open(right_image_path) if right_image_path and os.path.exists(right_image_path) else None
+
+    # 5) 返回 6 个值，映射到前端的 6 个组件
+    return (
+        str(patient_id),     # 映射到 id_batch
+        str(patient_age),    # 映射到 age_batch
+        str(patient_sex),    # 映射到 sex_batch
+        str(patient_ill),    # 映射到 ill_batch
+        left_image,          # 映射到 left_pre_eye_output_batch
+        right_image          # 映射到 right_pre_eye_output_batch
+    )
+
+
+
+def create_pie_chart(data):
+    # 将输入的数据转换为 DataFrame
+    df = pd.DataFrame(data, columns=['类别', '概率'])
+    labels = df['类别']
+    sizes = df['概率']
+    
+    # 创建饼状图
+    fig, ax = plt.subplots()
+    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')  # 确保饼图为圆形
+    
+    return fig
+
+def create_pie_chart2(data):
+    # 将输入的数据转换为 DataFrame
+    df = pd.DataFrame(data, columns=['id', 'age'])
+    labels = df['id']
+    sizes = df['age']
+    
+    # 创建饼状图
+    fig, ax = plt.subplots()
+    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')  # 确保饼图为圆形
+    
+    return fig
+
+import pandas as pd
+
+def upload_batch(excel_input):
+    if not excel_input:
+        # 如果用户没有上传文件或文件为空
+        return []
+
+    # 读取 Excel
+    df = pd.read_excel(excel_input.name)
+
+    # 结果列表，每行对应 ["id", "age", "sex","ill"]
+    results = []
+
+    # 需要检索的病症标签
+    label_cols = ["N","D","G","C","A","H","M","O"]
+
+    for i, row in df.iterrows():
+        # 提取 ID, Patient Age
+        patient_id = row.get("ID", "")
+        patient_age = row.get("Patient Age", "")
+        patient_sex = row.get("Patient Sex", "")
+
+        # 收集值为1的病症列
+        diseases = []
+        for col in label_cols:
+            if row.get(col, 0) == 1:
+                diseases.append(col)
+
+        # 用逗号拼接病症名称
+        patient_ill = ", ".join(diseases)
+
+        # 组合成单行结果
+        results.append([patient_id, patient_age, patient_sex, patient_ill])
+
+    # 返回二维列表
+    return results
+
+
+# =================== Gradio 界面 ===================
 
 # 创建 Gradio 界面
 with gr.Blocks() as demo:
   # 标题
   gr.Markdown("<p id='title'>👁️ AI 眼底检测系统</p>")
+# =================== Tab 2: 批量检测 ===================
+  with gr.Tab(label="批量导入"):
+    with gr.Row():
+# 左侧输入区
+      with gr.Column(scale=10):
+        with gr.Row():
+            excel_input = gr.File(label="上传Excel文件", file_types=[".xls", ".xlsx"])
+            upload_batch_button = gr.Button("批量导入")
+            # 点击批量按钮后，将预测结果更新到 Dataframe
 
+# 列表显示病人信息
+        with gr.Row():
+            # 批量检测结果展示(表格)
+            batch_information = gr.Dataframe(
+                value=data2,
+                headers=["id","年龄","性别","疾病"],
+                datatype=["str","number","str","str"],
+                label="信息列表",
+                # row_count=(5,"fixed"),   # 固定显示10行# 超出部分使用滚动条
+                row_count=10,    # 固定显示10行# 超出部分使用滚动条
+                col_count=(4,"fixed"),   # 固定显示10行# 超出部分使用滚动条
+                # col_count=4,     # 固定显示10行# 超出部分使用滚动条
+                wrap=True,
+                interactive=True  # 一定要设为 True，才会触发 select
+            )
+            upload_batch_button.click(
+                fn=upload_batch,
+                inputs=[excel_input],
+                outputs=[batch_information]
+        )
+
+        with gr.Row():
+            # 选择的行id
+            selected_row_id = gr.Textbox(label="选中行的ID")
+            batch_information.select(
+                fn=get_selected_id,
+                inputs=[batch_information],
+                outputs=[selected_row_id]
+            )
+            # 点击按钮后，将选择的行号显示在 Textbox 中
+            show_information_button = gr.Button("显示基本信息")
+
+# 右侧输出区
+      with gr.Column(scale=30):
+        # 基本信息
+        with gr.Tab(label="基本信息"):
+          with gr.Row():
+            id_batch = gr.Textbox(label="ID")
+            age_batch = gr.Textbox(label="年龄")
+            sex_batch = gr.Textbox(label="性别")
+          with gr.Tab(label="检测结果"):
+              with gr.Row():
+                left_pre_eye_output_batch = gr.Image(type="pil",label="左眼",)
+                right_pre_eye_output_batch = gr.Image(type="pil",label="右眼")
+              with gr.Row():
+                ill_batch = gr.Textbox(label="疾病类型",placeholder="疾病")
+        # 数据统计
+        with gr.Tab(label="数据统计"):
+          with gr.Row():
+            plot_button2 = gr.Button("生成饼状图")
+            plot_output2 = gr.Plot(label="饼状图")
+            plot_button2.click(fn=create_pie_chart2, inputs=batch_result, outputs=plot_output2)
+            # 统计图形
+            gr.Plot(label="年龄段与疾病分布")
+            gr.Plot(label="性别与疾病关联")
+            gr.Plot(label="年龄段与疾病分布")
+            gr.Plot(label="年龄段与疾病分布")
+            gr.Plot(label="年龄段与疾病分布")
+
+          # AI报告
+          with gr.Tab(label="AI报告"):
+            with gr.Group():
+                gr.Markdown("")
+                report_output = gr.Markdown(
+                    elem_id="report-box",
+                    value="等待生成报告...",
+                )
+            show_information_button.click(
+                fn=get_information_by_id,
+                inputs=[batch_information,selected_row_id],
+                outputs=[id_batch,age_batch,sex_batch,ill_batch,left_pre_eye_output_batch,right_pre_eye_output_batch]
+            )
 
 # =================== Tab 1: 单张检测 ===================
   with gr.Tab(label="单组导入"):
@@ -261,70 +451,6 @@ with gr.Blocks() as demo:
         )
 
 
-# =================== Tab 2: 批量检测 ===================
-  with gr.Tab(label="批量导入"):
-    with gr.Row():
-      with gr.Column(5):
-        excel_input = gr.File(label="上传Excel文件", file_types=[".xls", ".xlsx"])
-        batch_button = gr.Button("开始批量检测")
-        # 点击批量按钮后，将预测结果更新到 Dataframe
-    #     batch_button.click(
-    #         fn=batch_predict_by_excel,
-    #         inputs=[excel_input],
-    #         outputs=[batch_result]
-    # )
-# 列表显示病人信息
-      with gr.Column(scale=10):
-        # 批量检测结果展示(表格)
-        batch_result = gr.Dataframe(
-            value=data2,
-            headers=["id","age","ill"], 
-            datatype=["str","number","str"],
-            label="信息列表",
-            wrap=True,
-            interactive=True  # 一定要设为 True，才会触发 select
-        )
-       # 核心：在 Dataframe 上注册 select 事件，
-        # 事件回调函数 show_preprocessing_on_click 的第 2 个入参是 evt: gr.SelectData
-        # 其中 evt.index 就是点击的行号
-        # batch_result.select(
-        #     fn=show_preprocessing_on_click,
-        #     inputs=[excel_input],
-        #     outputs=[batch_preprocess_plot]
-        # )
-# 可视化某行图像的预处理
-      with gr.Column(scale=30):
-        # 数据统计
-        with gr.Tab(label="数据统计"):
-          with gr.Row():
-            plot_button2 = gr.Button("生成饼状图")
-            plot_output2 = gr.Plot(label="饼状图")
-            plot_button2.click(fn=create_pie_chart2, inputs=batch_result, outputs=plot_output2)
-            # 统计图形
-            gr.Plot(label="年龄段与疾病分布")
-            gr.Plot(label="性别与疾病关联")
-            gr.Plot(label="年龄段与疾病分布")
-            gr.Plot(label="年龄段与疾病分布")
-            gr.Plot(label="年龄段与疾病分布")
-        # 基本信息
-        with gr.Tab(label="基本信息"):
-          with gr.Row():
-            gr.Textbox(label="ID")
-            gr.Textbox(label="Age")
-          with gr.Tab(label="检测结果"):
-              with gr.Row():
-                gr.Image(label="左眼",)
-                gr.Image(label="右眼")
-              with gr.Row():
-                gr.Textbox(label="疾病类型",placeholder="疾病")
-          # AI报告
-          with gr.Tab(label="AI报告"):
-            with gr.Group():
-                gr.Markdown("")
-                report_output = gr.Markdown(
-                    elem_id="report-box",
-                    value="等待生成报告...",
-                )
 
 # =================== Tab 3: 病灶分割 ===================
   with gr.Tab(label="病灶分割"):
