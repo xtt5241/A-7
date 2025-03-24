@@ -1,0 +1,17 @@
+test_annotations_path = "dataset\val_annotations.xlsx" # val annotations are used for test
+images_path = '/home/java/python_code/assets/OIA-ODIR/On-site Test Set/preprocess_images/'
+model_path = '/home/java/python_code/ODIR-5K-multi-label-classification-main/outputsff/resnet50_dual_experiment_15_model_model2.pth'
+ground_truth_path = '/home/java/python_code/ODIR-5K-multi-label-classification-main/experiments/experiment_15/outputs/ground_truth_model2.xlsx'
+probs_path = '/home/java/python_code/ODIR-5K-multi-label-classification-main/experiments/experiment_15/outputs/outputs/_model2.xlsx'
+crop_size = 512
+
+/home/java/miniconda3/envs/NVC/bin/python /home/java/python_code/ODIR-5K-multi-label-classification-main/scripts/test.py \
+--model_path "/home/java/python_code/ODIR-5K-multi-label-classification-main/outputsff/resnet50_dual_experiment_15_model_model2.pth" \
+--images_path "/home/java/python_code/assets/OIA-ODIR/On-site Test Set/preprocess_images/" \
+--test_annotations_path "/home/java/python_code/assets/OIA-ODIR/On-site Test Set/Annotation/on-site test annotation (English).xlsx" \
+--use_normalization \
+--ground_truth_path "/home/java/python_code/ODIR-5K-multi-label-classification-main/experiments/e--crop_size 512utputs/_model2.xlsx"
+
+
+# 运行命令
+python ./XTT/xxr_model/test.py --model_path "XTT/xxr_model/resnet50_dual_experiment_15_model_model6.pth" --images_path "dataset/preprocess_images/" --test_annotations_path "dataset/val_annotations.xlsx" --use_normalization --ground_truth_path "dataset/xxr/ground_truth/_model2.xlsx" --probs_path "dataset/xxr/probs/probe_model2.xlsx"
