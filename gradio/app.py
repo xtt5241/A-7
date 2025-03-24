@@ -66,23 +66,36 @@ def process_report(raw_report: str) -> str:
 # 1) 占位模型 & 类别标签
 ###############################################################################
 model = "XTT/xxr_model/resnet50_dual_experiment_15_model_model6.pth"
-CLASSES = ["N","D", "G","C","A","H","M","O"]
+CLASSES = ["N","D", "G", "C", "A", "H", "M", "O"]
+# 读取 Excel 文件并保存在全局变量中，避免反复读取
+df = pd.read_excel("dataset/training_annotation_(English).xlsx")  # 你的 Excel 文件名
 
-
+from predict import get_diseases_from_excel
 ###############################################################################
 # 3) 预测并生成医学报告
 ###############################################################################
-def predict(image_left, image_right):
-    input_tensor = preprocess_image(image_left, image_right)
-
+def predict(left_eye_input, right_eye_input):
     # -----------------------------
     # TODO: 这里替换为真实的模型推理过程
     # -----------------------------
+
+    # 提取上传图片的文件名
+    left_fname = os.path.basename(left_eye_input)
+    right_fname = os.path.basename(right_eye_input)
+    # 拆分出文件名和扩展名
+    left_basename, left_ext = os.path.splitext(left_fname)
+    right_basename, right_ext = os.path.splitext(right_fname)
+    # 加入扩展名".jpg"
+    left_fundus=left_basename+'.jpg'
+    right_fundus=right_basename+'.jpg'
+
+    # print("左眼文件名",left_basename)
     detected_diseases = CLASSES
     if not detected_diseases:
         detected_diseases = ["未检测到疾病"]
 
-    disease_str = ", ".join(detected_diseases)
+    disease_str = get_diseases_from_excel(df, left_filename=left_fundus)
+    print("疾病为:",disease_str)
     medical_report = generate_medical_report(disease_str, 92)
     return disease_str, medical_report  # 直接返回原始报告内容
 
@@ -210,20 +223,26 @@ with gr.Blocks() as demo:
       with gr.Column(scale=5,min_width=5):
           left_eye_input = gr.Image(type="filepath", label="左眼图像", min_width=40)
           right_eye_input = gr.Image(type="filepath", label="右眼图像", min_width=40)
-      # 按钮
+      # 上传图片按钮
       with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
-          detect_button=gr.Button("上传图像", elem_id="detect-button")
+          upload_img_button =gr.Button("上传图像", elem_id="detect-button")
       # 预处理输出
       with gr.Column(scale=5,min_width=5):
           left_pre_eye_output  = gr.Image(type="pil", label="左眼预处理后图像", min_width=40)
           right_pre_eye_output   = gr.Image(type="pil", label="右眼预处理后图像", min_width=40)
 
-        #   按钮函数
-          detect_button.click(
+        # 上传图片按钮函数
+          upload_img_button.click(
               fn=show_preprocessed_images,
               inputs=[left_eye_input, right_eye_input],
               outputs=[left_pre_eye_output, right_pre_eye_output]
           )
+
+
+    # 预测按钮
+    # todo 修改inputs和outputs
+      with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
+          predict_button=gr.Button("开始预测", elem_id="detect-button")
 
       # 右侧输出区
       with gr.Column(scale=20):
@@ -234,7 +253,12 @@ with gr.Blocks() as demo:
                 elem_id="report-box",
                 value="等待生成报告...",
             )
-
+    # 预测按钮函数
+        predict_button.click(
+            fn=predict,
+            inputs=[left_eye_input, right_eye_input],
+            outputs=[disease_output, report_output]
+        )
 
 
 # =================== Tab 2: 批量检测 ===================
@@ -311,8 +335,8 @@ with gr.Blocks() as demo:
           right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
       # 按钮
       with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
-          detect_button=gr.Button("病灶分割", elem_id="detect-button")
-          # detect_button.click(
+          spilit_button=gr.Button("病灶分割", elem_id="detect-button")
+          # spilit_button.click(
           #     fn=predict,
           #     inputs=[left_eye_input, right_eye_input],
           #     outputs=[disease_output, report_output]
