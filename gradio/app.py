@@ -6,6 +6,7 @@ import numpy as np
 import requests
 import matplotlib.pyplot as plt
 import pandas as pd
+import os
 
 
 ###############################################################################
@@ -31,6 +32,7 @@ def call_local_llm(prompt: str) -> str:
 
 ###############################################################################
 # B) 生成医学报告
+# todo 修改置信度,修改报告格式
 ###############################################################################
 def generate_medical_report(disease, confidence):
     # 修改后的严格模板（添加分隔符要求）
@@ -316,15 +318,73 @@ def upload_batch(excel_input):
     return results
 
 
+# 界面美化
+###############################################################################
+# H) 界面美化 - 自定义 CSS
+###############################################################################
+css = """
+/* 外部容器，居中并限制整体宽度 */
+#app-container {
+  width: 100%;
+  height: 100%;
+}
+
+/* 标题居中，大一点 */
+#title {
+  text-align: center;
+  font-size: 2em;
+  margin-bottom: 20px;
+}
+
+/* 副标题居中 */
+#subtitle {
+  text-align: center;
+  margin-top: 10px;
+  margin-bottom: 30px;
+  font-size: 1.1em;
+}
+
+/* 让带有 center-button 类的按钮列居中 */
+.center-button {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.img_input {
+  width: 100%;
+  height: 100%;
+  }
+
+
+/* 疾病结果文本框的高度 */
+#disease-box {
+  min-height: 60px;
+  width: 100%;
+}
+
+/* 报告区域增加高度并可滚动 */
+#report-box {
+  height: 723px;
+  width: 100%;
+  overflow: auto;
+}
+
+
+"""
+
+
+
 # =================== Gradio 界面 ===================
 
 # 创建 Gradio 界面
-with gr.Blocks() as demo:
+with gr.Blocks(css=css) as demo:
   # 标题
   gr.Markdown("<p id='title'>👁️ AI 眼底检测系统</p>")
+
 # =================== Tab 2: 批量检测 ===================
   with gr.Tab(label="批量导入"):
-    with gr.Row():
+    with gr.Row(elem_id="app-container"):
 # 左侧输入区
       with gr.Column(scale=10):
         with gr.Row():
@@ -383,7 +443,7 @@ with gr.Blocks() as demo:
           with gr.Row():
             plot_button2 = gr.Button("生成饼状图")
             plot_output2 = gr.Plot(label="饼状图")
-            plot_button2.click(fn=create_pie_chart2, inputs=batch_result, outputs=plot_output2)
+            # plot_button2.click(fn=create_pie_chart2, inputs=batch_result, outputs=plot_output2)
             # 统计图形
             gr.Plot(label="年龄段与疾病分布")
             gr.Plot(label="性别与疾病关联")
@@ -391,51 +451,60 @@ with gr.Blocks() as demo:
             gr.Plot(label="年龄段与疾病分布")
             gr.Plot(label="年龄段与疾病分布")
 
-          # AI报告
-          with gr.Tab(label="AI报告"):
+          # AI分析
+          with gr.Tab(label="AI分析"):
             with gr.Group():
                 gr.Markdown("")
-                report_output = gr.Markdown(
-                    elem_id="report-box",
-                    value="等待生成报告...",
+                analysis_output = gr.Markdown(
+                    elem_id="analysis-box",
+                    value="等待生成分析报告...",
                 )
+
+
+
             show_information_button.click(
                 fn=get_information_by_id,
                 inputs=[batch_information,selected_row_id],
                 outputs=[id_batch,age_batch,sex_batch,ill_batch,left_pre_eye_output_batch,right_pre_eye_output_batch]
             )
 
+
+
 # =================== Tab 1: 单张检测 ===================
   with gr.Tab(label="单组导入"):
-
-    with gr.Row():
+    with gr.Row(elem_id="app-container"):
+      with gr.Column(scale=20,min_width=20):
       # 左侧输入区
-      with gr.Column(scale=5,min_width=5):
-          left_eye_input = gr.Image(type="filepath", label="左眼图像", min_width=40)
-          right_eye_input = gr.Image(type="filepath", label="右眼图像", min_width=40)
-      # 上传图片按钮
-      with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
-          upload_img_button =gr.Button("上传图像", elem_id="detect-button")
-      # 预处理输出
-      with gr.Column(scale=5,min_width=5):
-          left_pre_eye_output  = gr.Image(type="pil", label="左眼预处理后图像", min_width=40)
-          right_pre_eye_output   = gr.Image(type="pil", label="右眼预处理后图像", min_width=40)
+        #   with gr.Column(scale=8,min_width=8):
+        with gr.Row():
+            left_eye_input = gr.Image(type="filepath", label="左眼图像",height=350,width=350)
+            right_eye_input = gr.Image(type="filepath", label="右眼图像",height=350,width=350)
+        # 上传图片按钮
+        #   with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
+        with gr.Row():
+            upload_img_button =gr.Button("上传图像", elem_id="detect-button")
+        # 预处理输出
+        #   with gr.Column(scale=8,min_width=8):
+        with gr.Row():
+            left_pre_eye_output  = gr.Image(type="pil", label="左眼预处理后图像",height=350,width=350)
+            right_pre_eye_output   = gr.Image(type="pil", label="右眼预处理后图像",height=350,width=350)
 
-        # 上传图片按钮函数
-          upload_img_button.click(
-              fn=show_preprocessed_images,
-              inputs=[left_eye_input, right_eye_input],
-              outputs=[left_pre_eye_output, right_pre_eye_output]
-          )
+            # 上传图片按钮函数
+            upload_img_button.click(
+                fn=show_preprocessed_images,
+                inputs=[left_eye_input, right_eye_input],
+                outputs=[left_pre_eye_output, right_pre_eye_output]
+            )
 
 
-    # 预测按钮
-    # todo 修改inputs和outputs
-      with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
-          predict_button=gr.Button("开始预测", elem_id="detect-button")
+        # 预测按钮
+        # todo 修改inputs和outputs
+        #   with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
+        with gr.Row():
+            predict_button=gr.Button("开始预测", elem_id="detect-button")
 
       # 右侧输出区
-      with gr.Column(scale=20):
+      with gr.Column(scale=20,min_width=20):
         disease_output = gr.Textbox(label="检测结果", interactive=False, elem_id="disease-box")
         with gr.Group():
             gr.Markdown("")
@@ -452,39 +521,42 @@ with gr.Blocks() as demo:
 
 
 
-# =================== Tab 3: 病灶分割 ===================
-  with gr.Tab(label="病灶分割"):
-    with gr.Row():
-# 左侧输入区
-      with gr.Column(scale=5,min_width=5):
-          left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
-          right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
-      # 按钮
-      with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
-          spilit_button=gr.Button("病灶分割", elem_id="detect-button")
-          # spilit_button.click(
-          #     fn=predict,
-          #     inputs=[left_eye_input, right_eye_input],
-          #     outputs=[disease_output, report_output]
-          # )
-# 右侧输出区
-      # 血管分割
-      with gr.Column(scale=5,min_width=1):  # 添加 elem_classes
-            # 血管分割
-        with gr.Tab(label="血管分割"):
-            with gr.Column(scale=5,min_width=5):
-                left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
-                right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
-            # 视盘分割
-        with gr.Tab(label="视盘分割"):
-            with gr.Column(scale=20):
-                left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
-                right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
-            # 视杯分割
-        with gr.Tab(label="视杯分割"):
-            with gr.Column(scale=20):
-                left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
-                right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
+
+
+
+# # =================== Tab 3: 病灶分割 ===================
+#   with gr.Tab(label="病灶分割"):
+#     with gr.Row(elem_id="app-container"):
+# # 左侧输入区
+#       with gr.Column(scale=5,min_width=5):
+#           left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
+#           right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
+#       # 按钮
+#       with gr.Column(scale=1,min_width=1, elem_classes="center-button"):  # 添加 elem_classes
+#           spilit_button=gr.Button("病灶分割", elem_id="detect-button")
+#           # spilit_button.click(
+#           #     fn=predict,
+#           #     inputs=[left_eye_input, right_eye_input],
+#           #     outputs=[disease_output, report_output]
+#           # )
+# # 右侧输出区
+#       # 血管分割
+#       with gr.Column(scale=5,min_width=1):  # 添加 elem_classes
+#             # 血管分割
+#         with gr.Tab(label="血管分割"):
+#             with gr.Column(scale=5,min_width=5):
+#                 left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
+#                 right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
+#             # 视盘分割
+#         with gr.Tab(label="视盘分割"):
+#             with gr.Column(scale=20):
+#                 left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
+#                 right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
+#             # 视杯分割
+#         with gr.Tab(label="视杯分割"):
+#             with gr.Column(scale=20):
+#                 left_eye_input = gr.Image(type="numpy", label="左眼图像", min_width=40)
+#                 right_eye_input = gr.Image(type="numpy", label="右眼图像", min_width=40)
 
 
  
@@ -494,6 +566,7 @@ with gr.Blocks() as demo:
       "<p id='subtitle'>本系统基于深度学习模型分析左右眼眼底图像，通过本地部署的 deepseek-r1:1.5b 大模型生成医学报告<br>"
       "<em style='color: #e74c3c; font-size: 0.9em;'>检测结果仅供参考，实际诊断请咨询专业医生</em></p>"
   )
+
 
 
 
