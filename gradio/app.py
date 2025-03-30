@@ -8,7 +8,16 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 
+import matplotlib
+import matplotlib.font_manager as fm
+# 1) 如果你想**动态**添加一款本地字体文件（如黑体SimHei）：
+fm.fontManager.addfont(r"C:\Windows\Fonts\SimHei.ttf")  # 字体文件的绝对路径
 
+# 2) 告诉 Matplotlib 这就是你要用的默认 sans-serif 字体
+matplotlib.rcParams['font.sans-serif'] = ['SimHei']
+
+# 3) 解决负号“－”显示为方块的问题
+matplotlib.rcParams['axes.unicode_minus'] = False
 ###############################################################################
 # A) 调用 Ollama 的本地接口
 ###############################################################################
@@ -252,35 +261,178 @@ def get_information_by_id(batch_df, patient_id):
         right_image          # 映射到 right_pre_eye_output_batch
     )
 
-
-
-def create_pie_chart(data):
-    # 将输入的数据转换为 DataFrame
-    df = pd.DataFrame(data, columns=['类别', '概率'])
-    labels = df['类别']
-    sizes = df['概率']
-    
-    # 创建饼状图
-    fig, ax = plt.subplots()
-    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
-    ax.axis('equal')  # 确保饼图为圆形
-    
-    return fig
-
-def create_pie_chart2(data):
-    # 将输入的数据转换为 DataFrame
-    df = pd.DataFrame(data, columns=['id', 'age'])
-    labels = df['id']
-    sizes = df['age']
-    
-    # 创建饼状图
-    fig, ax = plt.subplots()
-    ax.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90)
-    ax.axis('equal')  # 确保饼图为圆形
-    
-    return fig
-
+# 数据分析部分
 import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
+
+def prepare_data_for_chart(data, col_index):
+    """
+    根据 col_index 判断要统计的是哪一列：
+    - col_index == 3 => 疾病(需要拆分逗号)
+    - col_index == 1 => 年龄(需要 pd.cut)
+    - 其他 => 直接 value_counts()
+    
+    返回 (labels, sizes, title) 给后续画图函数使用
+    """
+    df = pd.DataFrame(data, columns=["id","年龄","性别","疾病"])
+
+    if col_index == 3:
+        # 处理疾病列
+        all_ills = []
+        for i in df.index:
+            ill_str = df.loc[i, "疾病"]
+            if not ill_str:
+                continue
+            ills = [x.strip() for x in ill_str.split(",") if x.strip()]
+            all_ills.extend(ills)
+
+        if not all_ills:
+            # 没有有效疾病数据时，返回一个占位
+            return ["无疾病数据"], [1], "疾病分布"
+
+        series_data = pd.Series(all_ills).value_counts()
+        labels = series_data.index.astype(str).tolist()
+        sizes = series_data.values
+        title = "疾病分布"
+        return labels, sizes, title
+
+    elif col_index == 1:
+        # 年龄列 -> 分箱
+        df["年龄"] = pd.to_numeric(df["年龄"], errors="coerce")
+        bins = [0, 18, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 200]
+        labels_for_bins = [
+            "0-17", "18-24", "25-29", "30-34", "35-39",
+            "40-44", "45-49", "50-54", "55-59",
+            "60-64", "65-69", "70+"
+        ]
+        df["age_range"] = pd.cut(df["年龄"], bins=bins, labels=labels_for_bins, right=False)
+        series_data = df["age_range"].value_counts().sort_index()
+
+        labels = series_data.index.astype(str).tolist()
+        sizes = series_data.values
+        title = "年龄分布"
+        return labels, sizes, title
+
+    else:
+        # 其他列 -> value_counts()
+        col_name = df.columns[col_index]
+        series_data = df[col_name].value_counts()
+        labels = series_data.index.astype(str).tolist()
+        sizes = series_data.values
+        title = f"{col_name}分布"
+        return labels, sizes, title
+
+
+def create_pie_chart_from_labels(labels, sizes, title="分布图"):
+    """
+    根据 labels、sizes 绘制饼图
+    - 小于 5% 的扇区不显示数字
+    - 右侧使用图例显示分类标签
+    """
+    # 如果需要中文显示，可自行指定中文字体
+    # matplotlib.rcParams['font.sans-serif'] = ['SimHei']
+    # matplotlib.rcParams['axes.unicode_minus'] = False
+    
+    def autopct_func(pct):
+        return ('%.1f%%' % pct) if pct >= 5 else ''
+
+    fig, ax = plt.subplots(figsize=(6, 6))
+    wedges, _, autotexts = ax.pie(
+        sizes,
+        labels=labels,             # 不在图中直接显示 label
+        autopct=autopct_func,    # 小于5%不显示数字
+        startangle=140,
+        pctdistance=0.8,
+        labeldistance=1.05,
+    )
+    ax.axis('equal')  # 保持饼图为圆形
+    
+    # 在右侧显示图例
+    ax.legend(
+        wedges, 
+        labels, 
+        title=title,
+        loc="center left",
+        bbox_to_anchor=(1.0, 0, 0.5, 1)  # 可微调位置
+    )
+    plt.tight_layout()
+    return fig
+
+
+def create_bar_chart(labels, sizes, title="分布图"):
+    """
+    根据 labels、sizes 绘制柱状图
+    """
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.bar(labels, sizes, color='steelblue')
+    ax.set_xlabel("分类")
+    ax.set_ylabel("数量")
+    ax.set_title(title)
+    plt.xticks(rotation=45)  # 如果分类很多，可旋转一下以免重叠
+    plt.tight_layout()
+    return fig
+
+
+def plot_distribution(df_data, col_index, chart_type):
+    """
+    根据 chart_type 判断绘制饼图 or 柱状图
+    - df_data: 来自前端存储的二维列表 (batch_information)
+    - col_index: 统计哪一列 (1=年龄,3=疾病,...)
+    - chart_type: "饼图" or "柱状图"
+    """
+    labels, sizes, title = prepare_data_for_chart(df_data, col_index)
+
+    if chart_type == "柱状图":
+        fig = create_bar_chart(labels, sizes, title)
+    else:
+        fig = create_pie_chart_from_labels(labels, sizes, title)
+    
+    return fig
+
+
+def generate_analysis_report(data):
+    """
+    生成描述性统计报告：总数、平均年龄、男女人数、疾病分布等
+    """
+    df = pd.DataFrame(data, columns=["id","年龄","性别","疾病"])
+    total_count = len(df)
+
+    # 年龄
+    df["年龄"] = pd.to_numeric(df["年龄"], errors="coerce")
+    mean_age = df["年龄"].mean()
+    median_age = df["年龄"].median()
+
+    # 性别计数（注意你的Excel中是"Male"/"Female"或"M"/"F"要一致）
+    male_count = (df["性别"] == "Male").sum()
+    female_count = (df["性别"] == "Female").sum()
+
+    # 拼装文字
+    report = f"共导入样本：{total_count} 条记录\n\n"
+    report += f"- 平均年龄：{mean_age:.2f}\n"
+    report += f"- 中位数年龄：{median_age:.2f}\n"
+    report += f"- 男性人数：{male_count}\n"
+    report += f"- 女性人数：{female_count}\n\n"
+
+    # 疾病分布
+    all_ills = []
+    for i in df.index:
+        ill_str = df.loc[i, "疾病"]
+        if not ill_str:
+            continue
+        ills = [x.strip() for x in ill_str.split(",") if x.strip()]
+        all_ills.extend(ills)
+
+    if all_ills:
+        s = pd.Series(all_ills).value_counts()
+        report += "**疾病分布：**\n"
+        for disease_name, disease_count in s.items():
+            report += f"- {disease_name}：{disease_count}例\n"
+    else:
+        report += "**疾病分布：**暂无有效疾病数据\n"
+
+    return report
+
 
 def upload_batch(excel_input):
     if not excel_input:
@@ -389,12 +541,12 @@ with gr.Blocks(css=css) as demo:
       with gr.Column(scale=10):
         with gr.Row():
             excel_input = gr.File(label="上传Excel文件", file_types=[".xls", ".xlsx"])
-            upload_batch_button = gr.Button("批量导入")
+            upload_batch_button = gr.Button(value="批量导入")
             # 点击批量按钮后，将预测结果更新到 Dataframe
 
 # 列表显示病人信息
         with gr.Row():
-            # 批量检测结果展示(表格)
+            # 批量检测结果展示(表格)    
             batch_information = gr.Dataframe(
                 value=data2,
                 headers=["id","年龄","性别","疾病"],
@@ -407,6 +559,19 @@ with gr.Blocks(css=css) as demo:
                 wrap=True,
                 interactive=True  # 一定要设为 True，才会触发 select
             )
+            df_state = gr.State([])
+            # 点击“批量导入”按钮后，将读取结果填充到 batch_information
+            # 并同时更新 df_state
+            def upload_and_store(excel_file):
+                data_list = upload_batch(excel_file)  # 得到二维列表
+                return data_list, data_list
+
+            upload_batch_button.click(
+                fn=upload_and_store,
+                inputs=[excel_input],
+                outputs=[batch_information, df_state]
+            )
+
             upload_batch_button.click(
                 fn=upload_batch,
                 inputs=[excel_input],
@@ -426,6 +591,61 @@ with gr.Blocks(css=css) as demo:
 
 # 右侧输出区
       with gr.Column(scale=30):
+
+        # 数据统计
+        with gr.Tab(label="数据统计"):
+            with gr.Row():
+                analysis_btn = gr.Button("生成数据分析报告")
+            with gr.Row():
+                analysis_output = gr.Markdown(
+                    elem_id="analysis-box",
+                    value="等待生成分析报告...",
+                )
+            with gr.Row():
+                # 用来指定统计的是疾病还是年龄列
+                disease_col_index = gr.Number(value=3, visible=False)
+                age_col_index = gr.Number(value=1, visible=False)
+
+                # 用一个 Radio 让用户选“饼图”或“柱状图”
+                chart_type_selector = gr.Radio(
+                    ["柱状图", "饼图"],
+                    value="柱状图",  # 默认选饼图
+                    label="选择图表类型"
+                )
+
+            # 这里用两个按钮举例：分别统计“疾病”和“年龄”
+            with gr.Row():
+                disease_btn = gr.Button("查看疾病分布")
+                age_btn = gr.Button("查看年龄分布")
+
+            with gr.Row():
+                out_plot = gr.Plot(label="图表输出")
+
+
+
+
+            # 点击“疾病分布饼图” -> 统计第4列(索引3)
+            # “查看疾病分布”按钮
+            disease_btn.click(
+                fn=plot_distribution,
+                inputs=[df_state, disease_col_index, chart_type_selector], 
+                outputs=out_plot
+            )
+
+            # “查看年龄分布”按钮
+            age_btn.click(
+                fn=plot_distribution,
+                inputs=[df_state, age_col_index, chart_type_selector], 
+                outputs=out_plot
+            )
+
+
+            analysis_btn.click(
+                fn=generate_analysis_report,
+                inputs=[df_state],
+                outputs=[analysis_output]
+            )
+
         # 基本信息
         with gr.Tab(label="基本信息"):
           with gr.Row():
@@ -434,42 +654,16 @@ with gr.Blocks(css=css) as demo:
             sex_batch = gr.Textbox(label="性别")
           with gr.Tab(label="检测结果"):
               with gr.Row():
-                left_pre_eye_output_batch = gr.Image(type="pil",label="左眼",)
-                right_pre_eye_output_batch = gr.Image(type="pil",label="右眼")
+                left_pre_eye_output_batch = gr.Image(type="pil",label="左眼",width=500,height=500)
+                right_pre_eye_output_batch = gr.Image(type="pil",label="右眼",width=500,height=500)
               with gr.Row():
                 ill_batch = gr.Textbox(label="疾病类型",placeholder="疾病")
-        # 数据统计
-        with gr.Tab(label="数据统计"):
-          with gr.Row():
-            plot_button2 = gr.Button("生成饼状图")
-            plot_output2 = gr.Plot(label="饼状图")
-            # plot_button2.click(fn=create_pie_chart2, inputs=batch_result, outputs=plot_output2)
-            # 统计图形
-            gr.Plot(label="年龄段与疾病分布")
-            gr.Plot(label="性别与疾病关联")
-            gr.Plot(label="年龄段与疾病分布")
-            gr.Plot(label="年龄段与疾病分布")
-            gr.Plot(label="年龄段与疾病分布")
 
-          # AI分析
-          with gr.Tab(label="AI分析"):
-            with gr.Group():
-                gr.Markdown("")
-                analysis_output = gr.Markdown(
-                    elem_id="analysis-box",
-                    value="等待生成分析报告...",
-                )
-
-
-
-            show_information_button.click(
-                fn=get_information_by_id,
-                inputs=[batch_information,selected_row_id],
-                outputs=[id_batch,age_batch,sex_batch,ill_batch,left_pre_eye_output_batch,right_pre_eye_output_batch]
-            )
-
-
-
+        show_information_button.click(
+            fn=get_information_by_id,
+            inputs=[batch_information,selected_row_id],
+            outputs=[id_batch,age_batch,sex_batch,ill_batch,left_pre_eye_output_batch,right_pre_eye_output_batch]
+        )
 # =================== Tab 1: 单张检测 ===================
   with gr.Tab(label="单组导入"):
     with gr.Row(elem_id="app-container"):
